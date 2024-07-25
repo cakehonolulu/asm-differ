@@ -36,17 +36,36 @@ class DiffMode(enum.Enum):
     THREEWAY_PREV = "3prev"
     THREEWAY_BASE = "3base"
 
+env_args = {}
 
+def get_diff_params_from_env():
+    env = os.environ.copy()
+
+    if env["DIFF_BASEIMG"] is not None:
+        env_args["baseimg"] = env["DIFF_BASEIMG"]
+
+    if env["DIFF_MYIMG"] is not None:
+        env_args["myimg"] = env["DIFF_MYIMG"]
+
+    if env["DIFF_ARCH"] is not None:
+        env_args["arch"] = env["DIFF_ARCH"]
+        
+    if env["DIFF_OBJDUMP_BIN"] is not None:
+        env_args["objdump_executable"] = env["DIFF_OBJDUMP_BIN"]
+
+    if env["DIFF_DISS_ALL"] is not None:
+        env_args["disassemble_all"] = env["DIFF_DISS_ALL"]
+
+def apply_diff_settings(config, args):
+    for env_ in env_args:
+        config[env_] = env_args[env_]
+    
 # ==== COMMAND-LINE ====
 
+import os
+
 if __name__ == "__main__":
-    # Prefer to use diff_settings.py from the current working directory
-    sys.path.insert(0, ".")
-    try:
-        import diff_settings
-    except ModuleNotFoundError:
-        fail("Unable to find diff_settings.py in the same directory.")
-    sys.path.pop(0)
+    get_diff_params_from_env()
 
     try:
         import argcomplete
@@ -72,7 +91,7 @@ if __name__ == "__main__":
                 # result in a lot of useless completions
                 return []
             config: Dict[str, Any] = {}
-            diff_settings.apply(config, parsed_args)  # type: ignore
+            apply_diff_settings(config, parsed_args)  # type: ignore
             mapfile = config.get("mapfile")
             if not mapfile:
                 return []
@@ -364,7 +383,7 @@ if __name__ == "__main__":
     )
 
     # Project-specific flags, e.g. different versions/make arguments.
-    add_custom_arguments_fn = getattr(diff_settings, "add_custom_arguments", None)
+    add_custom_arguments_fn = getattr(env_args, "add_custom_arguments", None)
     if add_custom_arguments_fn:
         add_custom_arguments_fn(parser)
 
@@ -1522,12 +1541,7 @@ def dump_binary(
         end_addr = eval_int(end, "End address must be an integer expression.")
     else:
         end_addr = start_addr + config.max_function_size_bytes
-
-    if project.objdump_flags is None:
-        objdump_flags = ["-Dz", "-bbinary"] + ["-EB" if config.arch.big_endian else "-EL"]
-    else:
-        objdump_flags = project.objdump_flags
-
+    objdump_flags = ["-Dz", "-bbinary"] + ["-EB" if config.arch.big_endian else "-EL"]
     flags1 = [
         f"--start-address={start_addr + config.base_shift}",
         f"--stop-address={end_addr + config.base_shift}",
@@ -3568,7 +3582,7 @@ def main() -> None:
 
     # Apply project-specific configuration.
     settings: Dict[str, Any] = {}
-    diff_settings.apply(settings, args)  # type: ignore
+    apply_diff_settings(settings, args)  # type: ignore
     project = create_project_settings(settings)
 
     try:
@@ -3605,7 +3619,7 @@ def main() -> None:
     else:
         make_target, basecmd, mycmd = dump_binary(args.start, args.end, config, project)
 
-    map_build_target_fn = getattr(diff_settings, "map_build_target", None)
+    map_build_target_fn = getattr(env_args, "map_build_target", None)
     if map_build_target_fn:
         make_target = map_build_target_fn(make_target=make_target)
 
@@ -3643,7 +3657,7 @@ def main() -> None:
         if args.make:
             watch_sources = None
             watch_sources_for_target_fn = getattr(
-                diff_settings, "watch_sources_for_target", None
+                env_args, "watch_sources_for_target", None
             )
             if watch_sources_for_target_fn:
                 watch_sources = watch_sources_for_target_fn(make_target)
