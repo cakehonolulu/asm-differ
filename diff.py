@@ -56,6 +56,11 @@ def get_diff_params_from_env():
     if env["DIFF_DISS_ALL"] is not None:
         env_args["disassemble_all"] = env["DIFF_DISS_ALL"]
 
+    if "DIFF_BASE_IMG_BASE" in env and "DIFF_BASE_IMG_END" in env:
+        env_args["base_imgbase"] = int(env["DIFF_BASE_IMG_BASE"], 16)
+        env_args["base_imgend"] = int(env["DIFF_BASE_IMG_END"], 16)
+        env_args["base_imgname"] = env["DIFF_BASE_IMG_NAME"]
+
 def apply_diff_settings(config, args):
     for env_ in env_args:
         config[env_] = env_args[env_]
@@ -1123,6 +1128,25 @@ def maybe_get_objdump_source_flags(config: Config) -> List[str]:
 
 def run_objdump(cmd: ObjdumpCommand, config: Config, project: ProjectSettings) -> str:
     flags, target, restrict = cmd
+
+    if env_args["base_imgname"] is not None:
+        binary = env_args["base_imgname"]
+        if target.find(binary) != -1:
+            start_index = None
+            end_index = None
+            for i, flag in enumerate(flags):
+                if flag.startswith("--start-address="):
+                    start_index = i
+
+                if flag.startswith("--stop-address="):
+                    end_index = i
+
+            if start_index is not None:
+                flags[start_index] = "--start-address=" + str(env_args.get("base_imgbase", 0))
+
+            if end_index is not None:
+                flags[end_index] = "--stop-address=" + str(env_args.get("base_imgend", 0))
+
     try:
         out = subprocess.run(
             [project.objdump_executable]
